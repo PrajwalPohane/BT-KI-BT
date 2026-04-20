@@ -1,0 +1,29 @@
+{
+  "name": "blockmedshare-root",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "setup:frontend": "powershell -ExecutionPolicy Bypass -File ./scripts/setup-frontend.ps1",
+    "setup:backend": "powershell -ExecutionPolicy Bypass -File ./scripts/setup-backend.ps1",
+    "dev:patient": "npm run dev:patient --prefix frontend",
+    "dev:hospital": "npm run dev:hospital --prefix frontend",
+    "dev:api": "npm run dev:api --prefix backend",
+    "dev:listener": "npm run dev:listener --prefix backend",
+    "dev:frontend": "npm run dev:patient --prefix frontend",
+    "dev:backend": "npm run dev:api --prefix backend",
+    "build": "npm run build --prefix frontend && npm run build --prefix backend",
+    "lint": "npm run lint --prefix frontend && npm run lint --prefix backend",
+    "test": "npm run test --prefix backend",
+    "test:blockchain": "npm run test:blockchain --prefix backend",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.17",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20.11.1",
+    "npm": ">=10.0.0"
+  }
+}

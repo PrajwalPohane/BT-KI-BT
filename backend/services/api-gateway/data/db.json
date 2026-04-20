@@ -1,0 +1,107 @@
+{
+  "institutions": [
+    {
+      "id": "hosp-gamma",
+      "name": "Gamma Care Network",
+      "country": "IN",
+      "verified": true,
+      "createdAt": "2026-04-20T18:05:24.674Z"
+    },
+    {
+      "id": "hosp-alpha",
+      "name": "Alpha General Hospital",
+      "country": "IN",
+      "verified": true,
+      "createdAt": "2026-04-20T18:17:16.875Z"
+    },
+    {
+      "id": "hosp-beta",
+      "name": "Beta Specialist Center",
+      "country": "IN",
+      "verified": true,
+      "createdAt": "2026-04-20T18:17:16.877Z"
+    }
+  ],
+  "records": [
+    {
+      "id": "rec_d982889f-aca1-49b2-a777-b5052e535031",
+      "patientId": "patient-001",
+      "createdByInstitutionId": "hosp-alpha",
+      "dataType": "radiology",
+      "ciphertext": "XgyYzU3PTJlzEPs7INhgAY+IvLascM2XOOAjjLK+440yxgPiLTbc2pGRTw==",
+      "iv": "doplTFRzxiiL1Rlq",
+      "authTag": "uN/ttWt1zMtKzqU4474xyg==",
+      "hash": "c40d64f37b77c29919a550cb5dce2cbb83d26f22ad7a823cc185b5b1a0b4ba49",
+      "createdAt": "2026-04-20T18:17:16.923Z"
+    }
+  ],
+  "consents": [
+    {
+      "id": "consent_54e540c4-7cee-49d9-9ccb-66b5d308c0e1",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "expiryUnixSeconds": 1776795474,
+      "active": true,
+      "createdAt": "2026-04-20T18:17:54.315Z"
+    }
+  ],
+  "audits": [
+    {
+      "id": "audit_d4e0e53a-f905-416a-9bc7-1bc0a74d4973",
+      "timestamp": "2026-04-20T18:07:02.220Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-gamma",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "DENY",
+      "reason": "CONSENT_NOT_FOUND",
+      "tokenHash": "deb156f5b31d4f1bf020532f68d8df371625f73c4c4a21b53b25836dd64a7dbb"
+    },
+    {
+      "id": "audit_3449b516-497e-46c8-b5f5-5f4857e58185",
+      "timestamp": "2026-04-20T18:07:46.347Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-gamma",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "DENY",
+      "reason": "CONSENT_NOT_FOUND",
+      "tokenHash": "deb156f5b31d4f1bf020532f68d8df371625f73c4c4a21b53b25836dd64a7dbb"
+    },
+    {
+      "id": "audit_a99fe59c-db1d-4697-a672-c1dfc6fa971d",
+      "timestamp": "2026-04-20T18:07:58.253Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-gamma",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "DENY",
+      "reason": "CONSENT_NOT_FOUND",
+      "tokenHash": "deb156f5b31d4f1bf020532f68d8df371625f73c4c4a21b53b25836dd64a7dbb"
+    },
+    {
+      "id": "audit_8f7d7be8-870a-4bbf-8fec-7c987753627c",
+      "timestamp": "2026-04-20T18:16:38.267Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "DENY",
+      "reason": "UNVERIFIED_INSTITUTION",
+      "tokenHash": "1a0ffcb5c33d1a2ef7146d62be684ec2e763eb9f9d6d1bb88b546fcae883db40"
+    },
+    {
+      "id": "audit_e7b1e646-0a22-4abf-be8c-7c59afed1f49",
+      "timestamp": "2026-04-20T18:18:00.092Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "GRANT",
+      "reason": "AUTHORIZED",
+      "tokenHash": "12473c845b2c0dc8491c6c5c74d31923a4b53f5b6f25f34f595305c3622d3b01"
+    }
+  ]
+}

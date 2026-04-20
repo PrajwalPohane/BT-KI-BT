@@ -1,0 +1,17 @@
+node_modules/
+.next/
+dist/
+out/
+coverage/
+.cache/
+.env
+.env.local
+.env.example
+artifacts/
+cache/
+typechain-types/
+_docx_extract/
+_docx_tmp.zip
+_docx_fulltext.txt
+.DS_Store
+Thumbs.db

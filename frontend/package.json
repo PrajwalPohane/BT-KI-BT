@@ -1,0 +1,23 @@
+{
+  "name": "blockmedshare-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:patient": "npm run dev -w @blockmedshare/patient-portal",
+    "dev:hospital": "npm run dev -w @blockmedshare/hospital-portal",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.17",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20.11.1",
+    "npm": ">=10.0.0"
+  }
+}

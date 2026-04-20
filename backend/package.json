@@ -1,0 +1,27 @@
+{
+  "name": "blockmedshare-backend",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "services/*",
+    "packages/*",
+    "blockchain"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @blockmedshare/api-gateway",
+    "dev:listener": "npm run dev -w @blockmedshare/event-listener",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:blockchain": "npm run test -w @blockmedshare/blockchain"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.17",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20.11.1",
+    "npm": ">=10.0.0"
+  }
+}
