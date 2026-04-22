@@ -23,6 +23,7 @@ export interface RecordShard {
 export interface ConsentRecord {
   id: string;
   patientId: string;
+  patientWalletAddress: string;
   requesterInstitutionId: string;
   dataType: string;
   purpose: string;

@@ -2,6 +2,7 @@ import { AuditEntry, ConsentRecord, Institution, RecordShard } from "../types/mo
 import { ciphertextHash, decryptPayload, encryptPayload, makeTokenHash } from "../lib/crypto";
 import { makeId } from "../lib/ids";
 import { readStore, updateStore } from "../lib/store";
+import { hasActiveSubscription, isSubscriptionEnforced } from "../lib/subscription";
 
 export function registerInstitution(input: Omit<Institution, "verified" | "createdAt">): Institution {
   const institution: Institution = {
@@ -51,6 +52,7 @@ export function seedDemoData(): void {
     const demoConsent: ConsentRecord = {
       id: makeId("consent"),
       patientId: "patient-001",
+      patientWalletAddress: process.env.DEMO_PATIENT_WALLET_ADDRESS ?? "",
       requesterInstitutionId: "hosp-beta",
       dataType: "radiology",
       purpose: "treatment",
@@ -120,18 +122,24 @@ export function listPatientRecords(patientId: string): Array<Omit<RecordShard, "
     }));
 }
 
-export function grantConsent(input: {
+export async function grantConsent(input: {
   patientId: string;
+  patientWalletAddress: string;
   requesterInstitutionId: string;
   dataType: string;
   purpose: string;
   expiryUnixSeconds: number;
-}): ConsentRecord {
+}): Promise<ConsentRecord> {
   const store = readStore();
   const institution = store.institutions.find((item) => item.id === input.requesterInstitutionId && item.verified);
 
   if (!institution) {
     throw new Error("Requesting institution is not verified");
+  }
+
+  const subscribed = await hasActiveSubscription(input.patientWalletAddress);
+  if (!subscribed) {
+    throw new Error("Active subscription required");
   }
 
   const consent: ConsentRecord = {
@@ -156,7 +164,12 @@ export function grantConsent(input: {
   return consent;
 }
 
-export function revokeConsent(input: { patientId: string; requesterInstitutionId: string; dataType: string }): ConsentRecord {
+export async function revokeConsent(input: {
+  patientId: string;
+  patientWalletAddress: string;
+  requesterInstitutionId: string;
+  dataType: string;
+}): Promise<ConsentRecord> {
   const store = readStore();
   const found = store.consents.find(
     (item) =>
@@ -168,6 +181,15 @@ export function revokeConsent(input: { patientId: string; requesterInstitutionId
 
   if (!found) {
     throw new Error("Active consent not found");
+  }
+
+  if (found.patientWalletAddress.toLowerCase() !== input.patientWalletAddress.toLowerCase()) {
+    throw new Error("Wallet mismatch for consent revocation");
+  }
+
+  const subscribed = await hasActiveSubscription(input.patientWalletAddress);
+  if (!subscribed) {
+    throw new Error("Active subscription required");
   }
 
   const revoked: ConsentRecord = {
@@ -217,19 +239,19 @@ export function listAudits(filters?: { patientId?: string; requesterInstitutionI
   });
 }
 
-export function requestAccess(input: {
+export async function requestAccess(input: {
   patientId: string;
   requesterInstitutionId: string;
   dataType: string;
   purpose: string;
-}): {
+}): Promise<{
   decision: "GRANT" | "DENY";
   reason: string;
   tokenHash: string;
   audit: AuditEntry;
   plaintext?: string;
   recordId?: string;
-} {
+}> {
   const store = readStore();
   const now = Math.floor(Date.now() / 1000);
 
@@ -294,6 +316,27 @@ export function requestAccess(input: {
       tokenHash
     });
     return { decision: "DENY", reason: "PURPOSE_MISMATCH", tokenHash, audit };
+  }
+
+  if (isSubscriptionEnforced()) {
+    const subscribed = await hasActiveSubscription(consent.patientWalletAddress);
+    if (!subscribed) {
+      const tokenHash = makeTokenHash([
+        input.patientId,
+        input.requesterInstitutionId,
+        input.dataType,
+        input.purpose,
+        "DENY",
+        "SUBSCRIPTION_INACTIVE"
+      ]);
+      const audit = appendAudit({
+        ...input,
+        decision: "DENY",
+        reason: "SUBSCRIPTION_INACTIVE",
+        tokenHash
+      });
+      return { decision: "DENY", reason: "SUBSCRIPTION_INACTIVE", tokenHash, audit };
+    }
   }
 
   const matchingRecord = [...store.records]

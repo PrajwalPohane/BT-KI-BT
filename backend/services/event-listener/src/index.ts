@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const startBlock = Number(process.env.LISTENER_START_BLOCK ?? 0);
-const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:4000";
+const apiBaseUrl = process.env.API_BASE_URL ?? "http://127.0.0.1:4000";
 
 type Audit = {
   id: string;
@@ -18,9 +18,29 @@ type Audit = {
 };
 
 let seen = new Set<string>();
+let apiReachable = false;
+let lastPollError = "";
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
 
 async function pullAudits() {
-  const response = await fetch(`${apiBaseUrl}/audit`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/audit`, {
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+
   if (!response.ok) {
     throw new Error(`Failed to pull audits: ${response.status}`);
   }
@@ -40,11 +60,29 @@ async function main() {
   console.log(`[event-listener] booted from block ${startBlock}`);
   console.log(`[event-listener] polling ${apiBaseUrl}/audit`);
 
-  await pullAudits();
+  pullAudits().catch((error) => {
+    const message = errorMessage(error);
+    lastPollError = message;
+    console.error(`[event-listener] initial poll failed (${message}). Waiting for API at ${apiBaseUrl}`);
+  });
+
   setInterval(() => {
-    pullAudits().catch((error) => {
-      console.error("[event-listener] polling error", error);
-    });
+    pullAudits()
+      .then(() => {
+        if (!apiReachable) {
+          apiReachable = true;
+          lastPollError = "";
+          console.log("[event-listener] API reachable, polling resumed");
+        }
+      })
+      .catch((error) => {
+        const message = errorMessage(error);
+        if (apiReachable || message !== lastPollError) {
+          console.error(`[event-listener] polling error (${message})`);
+          apiReachable = false;
+          lastPollError = message;
+        }
+      });
   }, 3000);
 }
 

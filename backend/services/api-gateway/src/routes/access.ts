@@ -4,12 +4,16 @@ import { AccessRequestSchema } from "../lib/schemas";
 
 export const accessRouter = Router();
 
-accessRouter.post("/request", (req: Request, res: Response) => {
+accessRouter.post("/request", async (req: Request, res: Response) => {
   const parsed = AccessRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
 
-  const result = requestAccess(parsed.data);
-  return res.status(200).json(result);
+  try {
+    const result = await requestAccess(parsed.data);
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
 });
