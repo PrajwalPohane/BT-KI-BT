@@ -29,15 +29,25 @@ type Audit = {
   timestamp: string;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+type AuthUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: "patient" | "hospital";
+  createdAt: string;
+};
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const HOSPITAL_AUTH_STORAGE_KEY = "blockmedshare.auth.hospital";
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(options?.headers ?? {})
-    }
+      ...(options?.headers ?? {}),
+    },
   });
 
   if (!response.ok) {
@@ -51,24 +61,87 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 export default function HospitalPortalHome() {
   const [mounted, setMounted] = useState(false);
   const [message, setMessage] = useState("Ready");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authName, setAuthName] = useState("Hospital User");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authToken, setAuthToken] = useState("");
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [audits, setAudits] = useState<Audit[]>([]);
 
   const [patientId, setPatientId] = useState("patient-001");
-  const [requesterInstitutionId, setRequesterInstitutionId] = useState("hosp-beta");
+  const [requesterInstitutionId, setRequesterInstitutionId] =
+    useState("hosp-beta");
   const [dataType, setDataType] = useState("radiology");
   const [purpose, setPurpose] = useState("treatment");
 
   const [response, setResponse] = useState<AccessResponse | null>(null);
 
   const [newInstitutionId, setNewInstitutionId] = useState("hosp-gamma");
-  const [newInstitutionName, setNewInstitutionName] = useState("Gamma Care Network");
+  const [newInstitutionName, setNewInstitutionName] =
+    useState("Gamma Care Network");
   const [newInstitutionCountry, setNewInstitutionCountry] = useState("IN");
+
+  function saveAuthSession(token: string, user: AuthUser) {
+    setAuthToken(token);
+    setAuthUser(user);
+    localStorage.setItem(
+      HOSPITAL_AUTH_STORAGE_KEY,
+      JSON.stringify({ token, user }),
+    );
+  }
+
+  function clearAuthSession() {
+    setAuthToken("");
+    setAuthUser(null);
+    localStorage.removeItem(HOSPITAL_AUTH_STORAGE_KEY);
+  }
+
+  async function handleAuth(event: FormEvent) {
+    event.preventDefault();
+    setAuthLoading(true);
+
+    try {
+      const path = authMode === "signup" ? "/auth/signup" : "/auth/signin";
+      const payload =
+        authMode === "signup"
+          ? {
+              name: authName,
+              email: authEmail,
+              password: authPassword,
+              role: "hospital",
+            }
+          : { email: authEmail, password: authPassword, role: "hospital" };
+
+      const result = await apiFetch<{ token: string; user: AuthUser }>(path, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      saveAuthSession(result.token, result.user);
+      setMessage("Signed in");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Authentication failed",
+      );
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  function signOut() {
+    clearAuthSession();
+    setMessage("Signed out");
+  }
 
   async function loadData() {
     const [instRes, auditRes] = await Promise.all([
       apiFetch<{ institutions: Institution[] }>("/registry/institutions"),
-      apiFetch<{ audits: Audit[] }>(`/audit?requesterInstitutionId=${encodeURIComponent(requesterInstitutionId)}`)
+      apiFetch<{ audits: Audit[] }>(
+        `/audit?requesterInstitutionId=${encodeURIComponent(requesterInstitutionId)}`,
+      ),
     ]);
 
     setInstitutions(instRes.institutions);
@@ -93,14 +166,16 @@ export default function HospitalPortalHome() {
         body: JSON.stringify({
           id: newInstitutionId,
           name: newInstitutionName,
-          country: newInstitutionCountry
-        })
+          country: newInstitutionCountry,
+        }),
       });
       await loadData();
       setRequesterInstitutionId(newInstitutionId);
       setMessage("Institution registered");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Registration failed");
+      setMessage(
+        error instanceof Error ? error.message : "Registration failed",
+      );
     }
   }
 
@@ -113,14 +188,16 @@ export default function HospitalPortalHome() {
           patientId,
           requesterInstitutionId,
           dataType,
-          purpose
-        })
+          purpose,
+        }),
       });
       setResponse(result);
       await loadData();
       setMessage(`Access decision: ${result.decision}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Access request failed");
+      setMessage(
+        error instanceof Error ? error.message : "Access request failed",
+      );
     }
   }
 
@@ -133,10 +210,43 @@ export default function HospitalPortalHome() {
       return;
     }
 
+    const raw = localStorage.getItem(HOSPITAL_AUTH_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as { token?: string; user?: AuthUser };
+      if (!parsed.token || !parsed.user || parsed.user.role !== "hospital") {
+        clearAuthSession();
+        return;
+      }
+
+      apiFetch<{ user: AuthUser }>("/auth/me", {
+        headers: {
+          Authorization: `Bearer ${parsed.token}`,
+        },
+      })
+        .then((response) => {
+          saveAuthSession(parsed.token as string, response.user);
+        })
+        .catch(() => {
+          clearAuthSession();
+        });
+    } catch {
+      clearAuthSession();
+    }
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted || !authUser) {
+      return;
+    }
+
     loadData().catch((error) => {
       setMessage(error instanceof Error ? error.message : "Load failed");
     });
-  }, [mounted, requesterInstitutionId]);
+  }, [mounted, requesterInstitutionId, authUser]);
 
   if (!mounted) {
     return (
@@ -149,17 +259,99 @@ export default function HospitalPortalHome() {
     );
   }
 
+  if (!authUser) {
+    return (
+      <main className="container">
+        <header className="hero">
+          <h1>BlockMedShare Hospital Portal</h1>
+          <p>Sign in to access hospital workflows.</p>
+        </header>
+
+        <section className="card">
+          <h2>
+            {authMode === "signin" ? "Hospital Sign In" : "Hospital Sign Up"}
+          </h2>
+          <form className="grid" onSubmit={handleAuth}>
+            {authMode === "signup" && (
+              <label>
+                Full Name
+                <input
+                  value={authName}
+                  onChange={(event) => setAuthName(event.target.value)}
+                />
+              </label>
+            )}
+            <label>
+              Email
+              <input
+                type="email"
+                value={authEmail}
+                onChange={(event) => setAuthEmail(event.target.value)}
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(event) => setAuthPassword(event.target.value)}
+              />
+            </label>
+            <button type="submit" disabled={authLoading}>
+              {authLoading
+                ? "Please wait..."
+                : authMode === "signin"
+                  ? "Sign In"
+                  : "Sign Up"}
+            </button>
+          </form>
+          <button
+            type="button"
+            onClick={() =>
+              setAuthMode(authMode === "signin" ? "signup" : "signin")
+            }
+          >
+            {authMode === "signin"
+              ? "Need an account? Sign Up"
+              : "Already have an account? Sign In"}
+          </button>
+        </section>
+
+        <p className="status">Status: {message}</p>
+      </main>
+    );
+  }
+
   return (
     <main className="container">
       <header className="hero">
         <h1>BlockMedShare Hospital Portal</h1>
-        <p>Submit consent-aware cross-institution access requests and inspect audit records.</p>
+        <p>
+          Submit consent-aware cross-institution access requests and inspect
+          audit records.
+        </p>
+        <p>
+          Signed in as {authUser.name} ({authUser.email})
+        </p>
       </header>
 
       <section className="card row">
-        <button type="button" onClick={seed}>Seed Demo</button>
-        <button type="button" onClick={loadData}>Refresh</button>
-        <p className="hint">Seed Demo recreates the verified demo hospitals, a sample record, and a matching consent. Refresh reloads the latest server state.</p>
+        <button type="button" onClick={signOut}>
+          Sign Out
+        </button>
+      </section>
+
+      <section className="card row">
+        <button type="button" onClick={seed}>
+          Seed Demo
+        </button>
+        <button type="button" onClick={loadData}>
+          Refresh
+        </button>
+        <p className="hint">
+          Seed Demo recreates the verified demo hospitals, a sample record, and
+          a matching consent. Refresh reloads the latest server state.
+        </p>
       </section>
 
       <section className="card">
@@ -167,15 +359,24 @@ export default function HospitalPortalHome() {
         <form className="grid" onSubmit={registerInstitution}>
           <label>
             ID
-            <input value={newInstitutionId} onChange={(event) => setNewInstitutionId(event.target.value)} />
+            <input
+              value={newInstitutionId}
+              onChange={(event) => setNewInstitutionId(event.target.value)}
+            />
           </label>
           <label>
             Name
-            <input value={newInstitutionName} onChange={(event) => setNewInstitutionName(event.target.value)} />
+            <input
+              value={newInstitutionName}
+              onChange={(event) => setNewInstitutionName(event.target.value)}
+            />
           </label>
           <label>
             Country
-            <input value={newInstitutionCountry} onChange={(event) => setNewInstitutionCountry(event.target.value)} />
+            <input
+              value={newInstitutionCountry}
+              onChange={(event) => setNewInstitutionCountry(event.target.value)}
+            />
           </label>
           <button type="submit">Register</button>
         </form>
@@ -186,7 +387,12 @@ export default function HospitalPortalHome() {
         <form className="grid" onSubmit={requestAccess}>
           <label>
             Requester Institution
-            <select value={requesterInstitutionId} onChange={(event) => setRequesterInstitutionId(event.target.value)}>
+            <select
+              value={requesterInstitutionId}
+              onChange={(event) =>
+                setRequesterInstitutionId(event.target.value)
+              }
+            >
               {institutions.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name} ({item.id})
@@ -196,15 +402,24 @@ export default function HospitalPortalHome() {
           </label>
           <label>
             Patient ID
-            <input value={patientId} onChange={(event) => setPatientId(event.target.value)} />
+            <input
+              value={patientId}
+              onChange={(event) => setPatientId(event.target.value)}
+            />
           </label>
           <label>
             Data Type
-            <input value={dataType} onChange={(event) => setDataType(event.target.value)} />
+            <input
+              value={dataType}
+              onChange={(event) => setDataType(event.target.value)}
+            />
           </label>
           <label>
             Purpose
-            <input value={purpose} onChange={(event) => setPurpose(event.target.value)} />
+            <input
+              value={purpose}
+              onChange={(event) => setPurpose(event.target.value)}
+            />
           </label>
           <button type="submit">Request Access</button>
         </form>
@@ -225,7 +440,8 @@ export default function HospitalPortalHome() {
         <ul className="list">
           {audits.map((item) => (
             <li key={item.id}>
-              {item.timestamp} | {item.patientId} | {item.dataType} | {item.purpose} | {item.decision} ({item.reason})
+              {item.timestamp} | {item.patientId} | {item.dataType} |{" "}
+              {item.purpose} | {item.decision} ({item.reason})
             </li>
           ))}
         </ul>

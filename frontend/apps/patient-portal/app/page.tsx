@@ -1,7 +1,13 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { BrowserProvider, Contract, formatUnits, isAddress, parseUnits } from "ethers";
+import {
+  BrowserProvider,
+  Contract,
+  formatUnits,
+  isAddress,
+  parseUnits,
+} from "ethers";
 
 type Institution = {
   id: string;
@@ -58,7 +64,10 @@ type EthereumWindow = Window & {
   ethereum?: {
     request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
     on?: (event: string, handler: (...args: unknown[]) => void) => void;
-    removeListener?: (event: string, handler: (...args: unknown[]) => void) => void;
+    removeListener?: (
+      event: string,
+      handler: (...args: unknown[]) => void,
+    ) => void;
   };
 };
 
@@ -67,32 +76,52 @@ type WalletError = {
   message?: string;
 };
 
+type AuthUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: "patient" | "hospital";
+  createdAt: string;
+};
+
 function cleanEnv(value: string | undefined, fallback = ""): string {
   return (value ?? fallback).trim().replace(/^['\"]|['\"]$/g, "");
 }
 
-const API_BASE = cleanEnv(process.env.NEXT_PUBLIC_API_BASE_URL, "http://localhost:4000");
-const SUBSCRIPTION_ADDRESS = cleanEnv(process.env.NEXT_PUBLIC_SUBSCRIPTION_CONTRACT_ADDRESS);
+const API_BASE = cleanEnv(
+  process.env.NEXT_PUBLIC_API_BASE_URL,
+  "http://localhost:4000",
+);
+const PATIENT_AUTH_STORAGE_KEY = "blockmedshare.auth.patient";
+const SUBSCRIPTION_ADDRESS = cleanEnv(
+  process.env.NEXT_PUBLIC_SUBSCRIPTION_CONTRACT_ADDRESS,
+);
 const WBTC_ADDRESS = cleanEnv(process.env.NEXT_PUBLIC_WBTC_TOKEN_ADDRESS);
 const TARGET_CHAIN_HEX = cleanEnv(process.env.NEXT_PUBLIC_CHAIN_HEX, "0x7a69");
-const TARGET_CHAIN_NAME = cleanEnv(process.env.NEXT_PUBLIC_CHAIN_NAME, "Hardhat Local");
-const TARGET_RPC_URL = cleanEnv(process.env.NEXT_PUBLIC_CHAIN_RPC_URL, "http://127.0.0.1:8545");
+const TARGET_CHAIN_NAME = cleanEnv(
+  process.env.NEXT_PUBLIC_CHAIN_NAME,
+  "Hardhat Local",
+);
+const TARGET_RPC_URL = cleanEnv(
+  process.env.NEXT_PUBLIC_CHAIN_RPC_URL,
+  "http://127.0.0.1:8545",
+);
 
 const subscriptionAbi = [
   "function subscribe(uint256 planId, uint256 monthsCount) external",
   "function getSubscription(address subscriber) external view returns (bool active, uint256 expiry)",
-  "function plans(uint256) external view returns (string memory name, uint256 monthlyPriceSats, bool active)"
+  "function plans(uint256) external view returns (string memory name, uint256 monthlyPriceSats, bool active)",
 ];
 
 const erc20Abi = [
   "function approve(address spender, uint256 value) external returns (bool)",
   "function allowance(address owner, address spender) external view returns (uint256)",
-  "function balanceOf(address owner) external view returns (uint256)"
+  "function balanceOf(address owner) external view returns (uint256)",
 ];
 
 const defaultPlans: SubscriptionPlan[] = [
   { id: 1, name: "Basic Monthly", monthlyPriceSats: parseUnits("0.001", 8) },
-  { id: 2, name: "Premium Monthly", monthlyPriceSats: parseUnits("0.002", 8) }
+  { id: 2, name: "Premium Monthly", monthlyPriceSats: parseUnits("0.002", 8) },
 ];
 
 function normalizeError(error: unknown): string {
@@ -133,8 +162,8 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(options?.headers ?? {})
-    }
+      ...(options?.headers ?? {}),
+    },
   });
 
   if (!response.ok) {
@@ -148,6 +177,13 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 export default function PatientPortalHome() {
   const [mounted, setMounted] = useState(false);
   const [message, setMessage] = useState<string>("Ready");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authName, setAuthName] = useState("Patient User");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authToken, setAuthToken] = useState("");
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [patientId, setPatientId] = useState("patient-001");
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [consents, setConsents] = useState<Consent[]>([]);
@@ -165,14 +201,73 @@ export default function PatientPortalHome() {
   const [selectedPlanId, setSelectedPlanId] = useState(1);
   const [monthsCount, setMonthsCount] = useState(1);
   const [plans, setPlans] = useState<SubscriptionPlan[]>(defaultPlans);
-  const [subscription, setSubscription] = useState<SubscriptionStatus>({ active: false, expiry: 0n });
+  const [subscription, setSubscription] = useState<SubscriptionStatus>({
+    active: false,
+    expiry: 0n,
+  });
   const [wbtcBalance, setWbtcBalance] = useState<bigint>(0n);
   const [walletChainId, setWalletChainId] = useState("");
 
-  const activeConsents = useMemo(() => consents.filter((item) => item.active), [consents]);
+  const activeConsents = useMemo(
+    () => consents.filter((item) => item.active),
+    [consents],
+  );
   const subscriptionRequired = !subscription.active;
-  const invalidContractConfig = !isAddress(SUBSCRIPTION_ADDRESS) || !isAddress(WBTC_ADDRESS);
+  const invalidContractConfig =
+    !isAddress(SUBSCRIPTION_ADDRESS) || !isAddress(WBTC_ADDRESS);
   const walletProviderDetected = mounted && Boolean(getEthereum());
+
+  function saveAuthSession(token: string, user: AuthUser) {
+    setAuthToken(token);
+    setAuthUser(user);
+    localStorage.setItem(
+      PATIENT_AUTH_STORAGE_KEY,
+      JSON.stringify({ token, user }),
+    );
+  }
+
+  function clearAuthSession() {
+    setAuthToken("");
+    setAuthUser(null);
+    localStorage.removeItem(PATIENT_AUTH_STORAGE_KEY);
+  }
+
+  async function handleAuth(event: FormEvent) {
+    event.preventDefault();
+    setAuthLoading(true);
+
+    try {
+      const path = authMode === "signup" ? "/auth/signup" : "/auth/signin";
+      const payload =
+        authMode === "signup"
+          ? {
+              name: authName,
+              email: authEmail,
+              password: authPassword,
+              role: "patient",
+            }
+          : { email: authEmail, password: authPassword, role: "patient" };
+
+      const result = await apiFetch<{ token: string; user: AuthUser }>(path, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      saveAuthSession(result.token, result.user);
+      setMessage("Signed in");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Authentication failed",
+      );
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  function signOut() {
+    clearAuthSession();
+    setMessage("Signed out");
+  }
 
   function getEthereum() {
     return (window as EthereumWindow).ethereum;
@@ -180,12 +275,18 @@ export default function PatientPortalHome() {
 
   function requireConfiguredContracts() {
     if (invalidContractConfig) {
-      throw new Error("Invalid NEXT_PUBLIC_SUBSCRIPTION_CONTRACT_ADDRESS or NEXT_PUBLIC_WBTC_TOKEN_ADDRESS");
+      throw new Error(
+        "Invalid NEXT_PUBLIC_SUBSCRIPTION_CONTRACT_ADDRESS or NEXT_PUBLIC_WBTC_TOKEN_ADDRESS",
+      );
     }
   }
 
-  async function ensureTargetNetwork(ethereum: NonNullable<EthereumWindow["ethereum"]>) {
-    const currentChain = await ethereum.request({ method: "eth_chainId" }) as string;
+  async function ensureTargetNetwork(
+    ethereum: NonNullable<EthereumWindow["ethereum"]>,
+  ) {
+    const currentChain = (await ethereum.request({
+      method: "eth_chainId",
+    })) as string;
     setWalletChainId(currentChain);
 
     if (currentChain.toLowerCase() === TARGET_CHAIN_HEX.toLowerCase()) {
@@ -195,7 +296,7 @@ export default function PatientPortalHome() {
     try {
       await ethereum.request({
         method: "wallet_switchEthereumChain",
-        params: [{ chainId: TARGET_CHAIN_HEX }]
+        params: [{ chainId: TARGET_CHAIN_HEX }],
       });
       setWalletChainId(TARGET_CHAIN_HEX);
     } catch (error) {
@@ -214,10 +315,10 @@ export default function PatientPortalHome() {
             nativeCurrency: {
               name: "ETH",
               symbol: "ETH",
-              decimals: 18
-            }
-          }
-        ]
+              decimals: 18,
+            },
+          },
+        ],
       });
       setWalletChainId(TARGET_CHAIN_HEX);
     }
@@ -230,13 +331,17 @@ export default function PatientPortalHome() {
         throw new Error("MetaMask not detected");
       }
 
-      const accounts = await ethereum.request({ method: "eth_requestAccounts" }) as string[];
+      const accounts = (await ethereum.request({
+        method: "eth_requestAccounts",
+      })) as string[];
       const account = accounts[0] ?? "";
       if (!account) {
         throw new Error("No wallet account returned");
       }
 
-      const currentChain = await ethereum.request({ method: "eth_chainId" }) as string;
+      const currentChain = (await ethereum.request({
+        method: "eth_chainId",
+      })) as string;
       setWalletChainId(currentChain);
 
       setWalletAddress(account);
@@ -245,10 +350,14 @@ export default function PatientPortalHome() {
         if (currentChain.toLowerCase() === TARGET_CHAIN_HEX.toLowerCase()) {
           setMessage("Wallet connected");
         } else {
-          setMessage(`Wallet connected. Switch to ${TARGET_CHAIN_NAME} (${TARGET_CHAIN_HEX}) to subscribe.`);
+          setMessage(
+            `Wallet connected. Switch to ${TARGET_CHAIN_NAME} (${TARGET_CHAIN_HEX}) to subscribe.`,
+          );
         }
       } else {
-        setMessage("Wallet connected. Configure subscription contract addresses to continue.");
+        setMessage(
+          "Wallet connected. Configure subscription contract addresses to continue.",
+        );
       }
     } catch (error) {
       setMessage(normalizeError(error));
@@ -263,14 +372,20 @@ export default function PatientPortalHome() {
     }
 
     const provider = new BrowserProvider(ethereum);
-    const subscriptionContract = new Contract(SUBSCRIPTION_ADDRESS, subscriptionAbi, provider);
+    const subscriptionContract = new Contract(
+      SUBSCRIPTION_ADDRESS,
+      subscriptionAbi,
+      provider,
+    );
     const tokenContract = new Contract(WBTC_ADDRESS, erc20Abi, provider);
 
     const [status, balance, p1, p2] = await Promise.all([
-      subscriptionContract.getSubscription(address) as Promise<[boolean, bigint]>,
+      subscriptionContract.getSubscription(address) as Promise<
+        [boolean, bigint]
+      >,
       tokenContract.balanceOf(address) as Promise<bigint>,
       subscriptionContract.plans(1) as Promise<[string, bigint, boolean]>,
-      subscriptionContract.plans(2) as Promise<[string, bigint, boolean]>
+      subscriptionContract.plans(2) as Promise<[string, bigint, boolean]>,
     ]);
 
     setSubscription({ active: status[0], expiry: status[1] });
@@ -322,20 +437,35 @@ export default function PatientPortalHome() {
       const signerAddress = await signer.getAddress();
 
       const tokenContract = new Contract(WBTC_ADDRESS, erc20Abi, signer);
-      const subscriptionContract = new Contract(SUBSCRIPTION_ADDRESS, subscriptionAbi, signer);
+      const subscriptionContract = new Contract(
+        SUBSCRIPTION_ADDRESS,
+        subscriptionAbi,
+        signer,
+      );
 
-      const balance = await tokenContract.balanceOf(signerAddress) as bigint;
+      const balance = (await tokenContract.balanceOf(signerAddress)) as bigint;
       if (balance < total) {
-        throw new Error(`Insufficient BTC token balance. Need ${formatUnits(total, 8)} BTC, have ${formatUnits(balance, 8)} BTC`);
+        throw new Error(
+          `Insufficient BTC token balance. Need ${formatUnits(total, 8)} BTC, have ${formatUnits(balance, 8)} BTC`,
+        );
       }
 
-      const allowance = await tokenContract.allowance(walletAddress, SUBSCRIPTION_ADDRESS) as bigint;
+      const allowance = (await tokenContract.allowance(
+        walletAddress,
+        SUBSCRIPTION_ADDRESS,
+      )) as bigint;
       if (allowance < total) {
-        const approvalTx = await tokenContract.approve(SUBSCRIPTION_ADDRESS, total);
+        const approvalTx = await tokenContract.approve(
+          SUBSCRIPTION_ADDRESS,
+          total,
+        );
         await approvalTx.wait();
       }
 
-      const subscribeTx = await subscriptionContract.subscribe(selectedPlanId, monthsCount);
+      const subscribeTx = await subscriptionContract.subscribe(
+        selectedPlanId,
+        monthsCount,
+      );
       await subscribeTx.wait();
 
       await loadSubscription(walletAddress);
@@ -365,9 +495,15 @@ export default function PatientPortalHome() {
   async function loadAll(currentPatientId: string) {
     const [instRes, consentRes, recordsRes, auditsRes] = await Promise.all([
       apiFetch<{ institutions: Institution[] }>("/registry/institutions"),
-      apiFetch<{ consents: Consent[] }>(`/consents?patientId=${encodeURIComponent(currentPatientId)}`),
-      apiFetch<{ records: RecordItem[] }>(`/records/${encodeURIComponent(currentPatientId)}`),
-      apiFetch<{ audits: Audit[] }>(`/audit?patientId=${encodeURIComponent(currentPatientId)}`)
+      apiFetch<{ consents: Consent[] }>(
+        `/consents?patientId=${encodeURIComponent(currentPatientId)}`,
+      ),
+      apiFetch<{ records: RecordItem[] }>(
+        `/records/${encodeURIComponent(currentPatientId)}`,
+      ),
+      apiFetch<{ audits: Audit[] }>(
+        `/audit?patientId=${encodeURIComponent(currentPatientId)}`,
+      ),
     ]);
 
     setInstitutions(instRes.institutions);
@@ -409,17 +545,23 @@ export default function PatientPortalHome() {
           requesterInstitutionId: institutionId,
           dataType,
           purpose,
-          expiryUnixSeconds: Math.floor(Date.now() / 1000) + expiryHours * 60 * 60
-        })
+          expiryUnixSeconds:
+            Math.floor(Date.now() / 1000) + expiryHours * 60 * 60,
+        }),
       });
       await loadAll(patientId);
       setMessage("Consent granted");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Consent grant failed");
+      setMessage(
+        error instanceof Error ? error.message : "Consent grant failed",
+      );
     }
   }
 
-  async function onRevokeConsent(requesterInstitutionId: string, consentDataType: string) {
+  async function onRevokeConsent(
+    requesterInstitutionId: string,
+    consentDataType: string,
+  ) {
     if (subscriptionRequired) {
       setMessage("Active BTC subscription required before managing consent");
       setSubscriptionOpen(true);
@@ -438,13 +580,15 @@ export default function PatientPortalHome() {
           patientId,
           patientWalletAddress: walletAddress,
           requesterInstitutionId,
-          dataType: consentDataType
-        })
+          dataType: consentDataType,
+        }),
       });
       await loadAll(patientId);
       setMessage("Consent revoked");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Consent revoke failed");
+      setMessage(
+        error instanceof Error ? error.message : "Consent revoke failed",
+      );
     }
   }
 
@@ -457,13 +601,46 @@ export default function PatientPortalHome() {
       return;
     }
 
+    const raw = localStorage.getItem(PATIENT_AUTH_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as { token?: string; user?: AuthUser };
+      if (!parsed.token || !parsed.user || parsed.user.role !== "patient") {
+        clearAuthSession();
+        return;
+      }
+
+      apiFetch<{ user: AuthUser }>("/auth/me", {
+        headers: {
+          Authorization: `Bearer ${parsed.token}`,
+        },
+      })
+        .then((response) => {
+          saveAuthSession(parsed.token as string, response.user);
+        })
+        .catch(() => {
+          clearAuthSession();
+        });
+    } catch {
+      clearAuthSession();
+    }
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted || !authUser) {
+      return;
+    }
+
     loadAll(patientId).catch((error) => {
       setMessage(error instanceof Error ? error.message : "Load failed");
     });
-  }, [mounted, patientId]);
+  }, [mounted, patientId, authUser]);
 
   useEffect(() => {
-    if (!mounted) {
+    if (!mounted || !authUser) {
       return;
     }
 
@@ -472,11 +649,13 @@ export default function PatientPortalHome() {
       return;
     }
 
-    ethereum.request({ method: "eth_accounts" })
+    ethereum
+      .request({ method: "eth_accounts" })
       .then((accountsUnknown) => {
         const accounts = accountsUnknown as string[];
         if (accounts.length > 0) {
-          return ethereum.request({ method: "eth_chainId" })
+          return ethereum
+            .request({ method: "eth_chainId" })
             .then((chainUnknown) => {
               setWalletChainId(chainUnknown as string);
               setWalletAddress(accounts[0]);
@@ -488,10 +667,10 @@ export default function PatientPortalHome() {
       .catch(() => {
         // ignore silent auto-check failures
       });
-  }, [mounted]);
+  }, [mounted, authUser]);
 
   useEffect(() => {
-    if (!mounted) {
+    if (!mounted || !authUser) {
       return;
     }
 
@@ -500,7 +679,8 @@ export default function PatientPortalHome() {
       return;
     }
 
-    ethereum.request({ method: "eth_chainId" })
+    ethereum
+      .request({ method: "eth_chainId" })
       .then((chainUnknown) => {
         setWalletChainId(chainUnknown as string);
       })
@@ -515,7 +695,9 @@ export default function PatientPortalHome() {
     };
 
     const onAccountsChanged = (accountsUnknown: unknown) => {
-      const accounts = Array.isArray(accountsUnknown) ? accountsUnknown as string[] : [];
+      const accounts = Array.isArray(accountsUnknown)
+        ? (accountsUnknown as string[])
+        : [];
       const nextAccount = accounts[0] ?? "";
       setWalletAddress(nextAccount);
       if (nextAccount && !invalidContractConfig) {
@@ -532,7 +714,7 @@ export default function PatientPortalHome() {
       ethereum.removeListener?.("chainChanged", onChainChanged);
       ethereum.removeListener?.("accountsChanged", onAccountsChanged);
     };
-  }, [mounted, invalidContractConfig]);
+  }, [mounted, invalidContractConfig, authUser]);
 
   if (!mounted) {
     return (
@@ -545,32 +727,124 @@ export default function PatientPortalHome() {
     );
   }
 
+  if (!authUser) {
+    return (
+      <main className="container">
+        <header className="hero">
+          <h1>BlockMedShare Patient Portal</h1>
+          <p>Sign in to manage consent and subscription.</p>
+        </header>
+
+        <section className="card">
+          <h2>
+            {authMode === "signin" ? "Patient Sign In" : "Patient Sign Up"}
+          </h2>
+          <form className="grid" onSubmit={handleAuth}>
+            {authMode === "signup" && (
+              <label>
+                Full Name
+                <input
+                  value={authName}
+                  onChange={(event) => setAuthName(event.target.value)}
+                />
+              </label>
+            )}
+            <label>
+              Email
+              <input
+                type="email"
+                value={authEmail}
+                onChange={(event) => setAuthEmail(event.target.value)}
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(event) => setAuthPassword(event.target.value)}
+              />
+            </label>
+            <button type="submit" disabled={authLoading}>
+              {authLoading
+                ? "Please wait..."
+                : authMode === "signin"
+                  ? "Sign In"
+                  : "Sign Up"}
+            </button>
+          </form>
+          <button
+            type="button"
+            onClick={() =>
+              setAuthMode(authMode === "signin" ? "signup" : "signin")
+            }
+          >
+            {authMode === "signin"
+              ? "Need an account? Sign Up"
+              : "Already have an account? Sign In"}
+          </button>
+        </section>
+
+        <p className="status">Status: {message}</p>
+      </main>
+    );
+  }
+
   return (
     <main className="container">
       <header className="hero">
         <h1>BlockMedShare Patient Portal</h1>
-        <p>Grant and revoke data sharing consent with full audit transparency.</p>
+        <p>
+          Grant and revoke data sharing consent with full audit transparency.
+        </p>
+        <p>
+          Signed in as {authUser.name} ({authUser.email})
+        </p>
       </header>
+
+      <section className="card row">
+        <button type="button" onClick={signOut}>
+          Sign Out
+        </button>
+      </section>
 
       <section className="card row">
         <label>
           Patient ID
-          <input value={patientId} onChange={(event) => setPatientId(event.target.value)} />
+          <input
+            value={patientId}
+            onChange={(event) => setPatientId(event.target.value)}
+          />
         </label>
-        <button type="button" onClick={seed}>Seed Demo</button>
-        <button type="button" onClick={() => loadAll(patientId)}>Refresh</button>
-        <button type="button" onClick={() => setSubscriptionOpen(true)}>Manage BTC Subscription</button>
-        <p className="hint">Seed Demo recreates the demo patient record, institutions, and consent. Refresh reloads the latest consents, records, and audit trail from the server.</p>
+        <button type="button" onClick={seed}>
+          Seed Demo
+        </button>
+        <button type="button" onClick={() => loadAll(patientId)}>
+          Refresh
+        </button>
+        <button type="button" onClick={() => setSubscriptionOpen(true)}>
+          Manage BTC Subscription
+        </button>
+        <p className="hint">
+          Seed Demo recreates the demo patient record, institutions, and
+          consent. Refresh reloads the latest consents, records, and audit trail
+          from the server.
+        </p>
       </section>
 
       <section className="card">
         <h2>Subscription Status</h2>
         <p>
-          Wallet: {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "Not connected"}
+          Wallet:{" "}
+          {walletAddress
+            ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
+            : "Not connected"}
         </p>
         <p>
           Status: {subscription.active ? "Active" : "Inactive"}
-          {subscription.expiry > 0n ? ` (expires ${new Date(Number(subscription.expiry) * 1000).toLocaleString()})` : ""}
+          {subscription.expiry > 0n
+            ? ` (expires ${new Date(Number(subscription.expiry) * 1000).toLocaleString()})`
+            : ""}
         </p>
         <p>WBTC Balance: {formatUnits(wbtcBalance, 8)} BTC</p>
       </section>
@@ -580,7 +854,10 @@ export default function PatientPortalHome() {
         <form className="grid" onSubmit={onGrantConsent}>
           <label>
             Institution
-            <select value={institutionId} onChange={(event) => setInstitutionId(event.target.value)}>
+            <select
+              value={institutionId}
+              onChange={(event) => setInstitutionId(event.target.value)}
+            >
               {institutions.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name} ({item.id})
@@ -590,11 +867,17 @@ export default function PatientPortalHome() {
           </label>
           <label>
             Data Type
-            <input value={dataType} onChange={(event) => setDataType(event.target.value)} />
+            <input
+              value={dataType}
+              onChange={(event) => setDataType(event.target.value)}
+            />
           </label>
           <label>
             Purpose
-            <input value={purpose} onChange={(event) => setPurpose(event.target.value)} />
+            <input
+              value={purpose}
+              onChange={(event) => setPurpose(event.target.value)}
+            />
           </label>
           <label>
             Expiry (hours)
@@ -602,13 +885,17 @@ export default function PatientPortalHome() {
               type="number"
               min={1}
               value={expiryHours}
-              onChange={(event) => setExpiryHours(Number(event.target.value) || 1)}
+              onChange={(event) =>
+                setExpiryHours(Number(event.target.value) || 1)
+              }
             />
           </label>
           <button type="submit">Grant</button>
         </form>
         {subscriptionRequired && (
-          <p className="warning">An active BTC subscription is required to grant or revoke consent.</p>
+          <p className="warning">
+            An active BTC subscription is required to grant or revoke consent.
+          </p>
         )}
       </section>
 
@@ -618,9 +905,16 @@ export default function PatientPortalHome() {
           {activeConsents.map((item) => (
             <li key={item.id}>
               <span>
-                {item.requesterInstitutionId} | {item.dataType} | {item.purpose} | expires {new Date(item.expiryUnixSeconds * 1000).toLocaleString()}
+                {item.requesterInstitutionId} | {item.dataType} | {item.purpose}{" "}
+                | expires{" "}
+                {new Date(item.expiryUnixSeconds * 1000).toLocaleString()}
               </span>
-              <button type="button" onClick={() => onRevokeConsent(item.requesterInstitutionId, item.dataType)}>
+              <button
+                type="button"
+                onClick={() =>
+                  onRevokeConsent(item.requesterInstitutionId, item.dataType)
+                }
+              >
                 Revoke
               </button>
             </li>
@@ -633,43 +927,68 @@ export default function PatientPortalHome() {
           <div className="modalCard">
             <h2>Subscribe Using Bitcoin on MetaMask</h2>
             <p>
-              Payment is processed using BTC-compatible ERC-20 token (for example WBTC/mBTC) through MetaMask.
+              Payment is processed using BTC-compatible ERC-20 token (for
+              example WBTC/mBTC) through MetaMask.
             </p>
             <p className="hint">
-              Required chain: {TARGET_CHAIN_NAME} ({TARGET_CHAIN_HEX}). Current chain: {walletChainId || (walletProviderDetected ? "Not connected" : "MetaMask provider not detected")}
+              Required chain: {TARGET_CHAIN_NAME} ({TARGET_CHAIN_HEX}). Current
+              chain:{" "}
+              {walletChainId ||
+                (walletProviderDetected
+                  ? "Not connected"
+                  : "MetaMask provider not detected")}
             </p>
             {!walletProviderDetected && (
               <p className="warning">
-                MetaMask is not available in this browser context. Open the patient portal in a normal browser profile where MetaMask extension is installed and unlocked.
+                MetaMask is not available in this browser context. Open the
+                patient portal in a normal browser profile where MetaMask
+                extension is installed and unlocked.
               </p>
             )}
             <p className="hint">
-              Runtime config: subscription {isAddress(SUBSCRIPTION_ADDRESS) ? "ok" : "invalid"} ({SUBSCRIPTION_ADDRESS || "empty"}),
-              token {isAddress(WBTC_ADDRESS) ? "ok" : "invalid"} ({WBTC_ADDRESS || "empty"})
+              Runtime config: subscription{" "}
+              {isAddress(SUBSCRIPTION_ADDRESS) ? "ok" : "invalid"} (
+              {SUBSCRIPTION_ADDRESS || "empty"}), token{" "}
+              {isAddress(WBTC_ADDRESS) ? "ok" : "invalid"} (
+              {WBTC_ADDRESS || "empty"})
             </p>
             {invalidContractConfig && (
               <p className="warning">
-                Invalid contract configuration. Set NEXT_PUBLIC_SUBSCRIPTION_CONTRACT_ADDRESS and NEXT_PUBLIC_WBTC_TOKEN_ADDRESS.
+                Invalid contract configuration. Set
+                NEXT_PUBLIC_SUBSCRIPTION_CONTRACT_ADDRESS and
+                NEXT_PUBLIC_WBTC_TOKEN_ADDRESS.
               </p>
             )}
 
             {!walletAddress ? (
-              <button type="button" onClick={connectWallet}>Connect MetaMask</button>
+              <button type="button" onClick={connectWallet}>
+                Connect MetaMask
+              </button>
             ) : (
               <p>Connected: {walletAddress}</p>
             )}
 
-            <button type="button" onClick={switchNetworkManually} disabled={!getEthereum()}>
+            <button
+              type="button"
+              onClick={switchNetworkManually}
+              disabled={!getEthereum()}
+            >
               Switch Network
             </button>
 
             <form className="grid" onSubmit={subscribeWithBtc}>
               <label>
                 Plan
-                <select value={selectedPlanId} onChange={(event) => setSelectedPlanId(Number(event.target.value))}>
+                <select
+                  value={selectedPlanId}
+                  onChange={(event) =>
+                    setSelectedPlanId(Number(event.target.value))
+                  }
+                >
                   {plans.map((plan) => (
                     <option key={plan.id} value={plan.id}>
-                      {plan.name} - {formatUnits(plan.monthlyPriceSats, 8)} BTC / month
+                      {plan.name} - {formatUnits(plan.monthlyPriceSats, 8)} BTC
+                      / month
                     </option>
                   ))}
                 </select>
@@ -681,14 +1000,25 @@ export default function PatientPortalHome() {
                   type="number"
                   min={1}
                   value={monthsCount}
-                  onChange={(event) => setMonthsCount(Number(event.target.value) || 1)}
+                  onChange={(event) =>
+                    setMonthsCount(Number(event.target.value) || 1)
+                  }
                 />
               </label>
 
-              <button type="submit" disabled={subscriptionLoading || !walletAddress || invalidContractConfig}>
+              <button
+                type="submit"
+                disabled={
+                  subscriptionLoading || !walletAddress || invalidContractConfig
+                }
+              >
                 {subscriptionLoading ? "Processing..." : "Approve & Subscribe"}
               </button>
-              <button type="button" onClick={() => setSubscriptionOpen(false)} disabled={subscriptionLoading}>
+              <button
+                type="button"
+                onClick={() => setSubscriptionOpen(false)}
+                disabled={subscriptionLoading}
+              >
                 Close
               </button>
             </form>
@@ -701,7 +1031,8 @@ export default function PatientPortalHome() {
         <ul className="list">
           {records.map((item) => (
             <li key={item.id}>
-              {item.dataType} | created by {item.createdByInstitutionId} | hash {item.hash.slice(0, 16)}...
+              {item.dataType} | created by {item.createdByInstitutionId} | hash{" "}
+              {item.hash.slice(0, 16)}...
             </li>
           ))}
         </ul>
@@ -712,7 +1043,8 @@ export default function PatientPortalHome() {
         <ul className="list">
           {audits.map((item) => (
             <li key={item.id}>
-              {item.timestamp} | {item.requesterInstitutionId} | {item.dataType} | {item.purpose} | {item.decision} ({item.reason})
+              {item.timestamp} | {item.requesterInstitutionId} | {item.dataType}{" "}
+              | {item.purpose} | {item.decision} ({item.reason})
             </li>
           ))}
         </ul>

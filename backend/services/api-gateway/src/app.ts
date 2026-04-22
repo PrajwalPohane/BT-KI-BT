@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import express from "express";
 import helmet from "helmet";
 import { accessRouter } from "./routes/access";
+import { authRouter } from "./routes/auth";
 import { auditRouter } from "./routes/audit";
 import { consentRouter } from "./routes/consents";
 import { healthRouter } from "./routes/health";
@@ -17,11 +18,14 @@ export const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: (process.env.CORS_ORIGIN ?? "http://localhost:3000,http://localhost:3001").split(",")
-  })
+    origin: (
+      process.env.CORS_ORIGIN ?? "http://localhost:3000,http://localhost:3001"
+    ).split(","),
+  }),
 );
 app.use(express.json());
 
+app.use("/auth", authRouter);
 app.use("/health", healthRouter);
 app.use("/registry", registryRouter);
 app.use("/records", recordsRouter);
