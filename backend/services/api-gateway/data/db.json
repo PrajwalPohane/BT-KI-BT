@@ -103,6 +103,17 @@
       "decision": "GRANT",
       "reason": "AUTHORIZED",
       "tokenHash": "12473c845b2c0dc8491c6c5c74d31923a4b53f5b6f25f34f595305c3622d3b01"
+    },
+    {
+      "id": "audit_728f0737-9902-4c59-b103-187819f4ec84",
+      "timestamp": "2026-04-22T16:25:40.287Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "cardiology",
+      "purpose": "treatment",
+      "decision": "DENY",
+      "reason": "CONSENT_NOT_FOUND",
+      "tokenHash": "558d226dec7a620477055efed2f665458fce201e5033c2052c63a3a1394e3d6c"
     }
   ]
 }

@@ -2,6 +2,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import helmet from "helmet";
+import path from "path";
 import { accessRouter } from "./routes/access";
 import { authRouter } from "./routes/auth";
 import { auditRouter } from "./routes/audit";
@@ -10,8 +11,7 @@ import { healthRouter } from "./routes/health";
 import { recordsRouter } from "./routes/records";
 import { registryRouter } from "./routes/registry";
 import { seedRouter } from "./routes/seed";
-
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "../../../..", ".env") });
 
 export const app = express();
 

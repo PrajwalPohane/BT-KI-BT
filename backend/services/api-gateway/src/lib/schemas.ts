@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const WalletAddressSchema = z
   .string()
+  .trim()
   .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid wallet address");
 
 export const RegisterInstitutionSchema = z.object({

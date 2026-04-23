@@ -4,6 +4,10 @@ import { makeId } from "../lib/ids";
 import { readStore, updateStore } from "../lib/store";
 import { hasActiveSubscription, isSubscriptionEnforced } from "../lib/subscription";
 
+function normalizeWalletAddress(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 export function registerInstitution(input: Omit<Institution, "verified" | "createdAt">): Institution {
   const institution: Institution = {
     ...input,
@@ -142,9 +146,12 @@ export async function grantConsent(input: {
     throw new Error("Active subscription required");
   }
 
+  const normalizedWalletAddress = normalizeWalletAddress(input.patientWalletAddress);
+
   const consent: ConsentRecord = {
     id: makeId("consent"),
     ...input,
+    patientWalletAddress: normalizedWalletAddress,
     active: true,
     createdAt: new Date().toISOString()
   };
@@ -183,17 +190,21 @@ export async function revokeConsent(input: {
     throw new Error("Active consent not found");
   }
 
-  if (found.patientWalletAddress.toLowerCase() !== input.patientWalletAddress.toLowerCase()) {
+  const normalizedInputWallet = normalizeWalletAddress(input.patientWalletAddress);
+  const normalizedStoredWallet = normalizeWalletAddress(found.patientWalletAddress ?? "");
+
+  if (normalizedStoredWallet && normalizedStoredWallet !== normalizedInputWallet) {
     throw new Error("Wallet mismatch for consent revocation");
   }
 
-  const subscribed = await hasActiveSubscription(input.patientWalletAddress);
+  const subscribed = await hasActiveSubscription(normalizedInputWallet);
   if (!subscribed) {
     throw new Error("Active subscription required");
   }
 
   const revoked: ConsentRecord = {
     ...found,
+    patientWalletAddress: normalizedStoredWallet || normalizedInputWallet,
     active: false,
     revokedAt: new Date().toISOString()
   };

@@ -124,6 +124,10 @@ const defaultPlans: SubscriptionPlan[] = [
   { id: 2, name: "Premium Monthly", monthlyPriceSats: parseUnits("0.002", 8) },
 ];
 
+function isTargetChain(chainId: string): boolean {
+  return chainId.toLowerCase() === TARGET_CHAIN_HEX.toLowerCase();
+}
+
 function normalizeError(error: unknown): string {
   if (!error) {
     return "Unknown wallet error";
@@ -136,9 +140,15 @@ function normalizeError(error: unknown): string {
   }
 
   const candidate = error as {
+    code?: string;
     message?: string;
     reason?: string;
     shortMessage?: string;
+    info?: {
+      method?: string;
+      signature?: string;
+    };
+    value?: string;
     data?: {
       message?: string;
       originalError?: {
@@ -146,6 +156,15 @@ function normalizeError(error: unknown): string {
       };
     };
   };
+
+  if (
+    candidate.code === "BAD_DATA" &&
+    candidate.value === "0x" &&
+    (candidate.info?.method === "balanceOf" ||
+      candidate.info?.signature === "balanceOf(address)")
+  ) {
+    return "Token contract is unavailable on the currently selected network. Switch MetaMask to Hardhat Local and redeploy contracts if the node was restarted.";
+  }
 
   return (
     candidate.shortMessage ||
@@ -168,7 +187,12 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+    try {
+      const parsed = JSON.parse(text) as { error?: string };
+      throw new Error(parsed.error || text || `Request failed: ${response.status}`);
+    } catch {
+      throw new Error(text || `Request failed: ${response.status}`);
+    }
   }
 
   return response.json() as Promise<T>;
@@ -281,6 +305,19 @@ export default function PatientPortalHome() {
     }
   }
 
+  async function ensureContractsDeployed(provider: BrowserProvider) {
+    const [subscriptionCode, tokenCode] = await Promise.all([
+      provider.getCode(SUBSCRIPTION_ADDRESS),
+      provider.getCode(WBTC_ADDRESS),
+    ]);
+
+    if (subscriptionCode === "0x" || tokenCode === "0x") {
+      throw new Error(
+        "Contract bytecode not found on this network. Keep Hardhat node running, redeploy contracts, and verify NEXT_PUBLIC contract addresses.",
+      );
+    }
+  }
+
   async function ensureTargetNetwork(
     ethereum: NonNullable<EthereumWindow["ethereum"]>,
   ) {
@@ -346,14 +383,15 @@ export default function PatientPortalHome() {
 
       setWalletAddress(account);
       if (!invalidContractConfig) {
-        await loadSubscription(account);
-        if (currentChain.toLowerCase() === TARGET_CHAIN_HEX.toLowerCase()) {
-          setMessage("Wallet connected");
-        } else {
+        if (!isTargetChain(currentChain)) {
           setMessage(
             `Wallet connected. Switch to ${TARGET_CHAIN_NAME} (${TARGET_CHAIN_HEX}) to subscribe.`,
           );
+          return;
         }
+
+        await loadSubscription(account);
+        setMessage("Wallet connected");
       } else {
         setMessage(
           "Wallet connected. Configure subscription contract addresses to continue.",
@@ -372,6 +410,19 @@ export default function PatientPortalHome() {
     }
 
     const provider = new BrowserProvider(ethereum);
+    const network = await provider.getNetwork();
+    const chainHex = `0x${network.chainId.toString(16)}`;
+
+    if (!isTargetChain(chainHex)) {
+      setSubscription({ active: false, expiry: 0n });
+      setWbtcBalance(0n);
+      throw new Error(
+        `Wrong network selected. Switch MetaMask to ${TARGET_CHAIN_NAME} (${TARGET_CHAIN_HEX}).`,
+      );
+    }
+
+    await ensureContractsDeployed(provider);
+
     const subscriptionContract = new Contract(
       SUBSCRIPTION_ADDRESS,
       subscriptionAbi,
@@ -486,6 +537,9 @@ export default function PatientPortalHome() {
       }
 
       await ensureTargetNetwork(ethereum);
+      if (walletAddress && !invalidContractConfig) {
+        await loadSubscription(walletAddress);
+      }
       setMessage(`Switched to ${TARGET_CHAIN_NAME} (${TARGET_CHAIN_HEX})`);
     } catch (error) {
       setMessage(normalizeError(error));
@@ -623,6 +677,7 @@ export default function PatientPortalHome() {
         })
         .catch(() => {
           clearAuthSession();
+          setMessage("Session expired. Please sign in again.");
         });
     } catch {
       clearAuthSession();
@@ -657,9 +712,13 @@ export default function PatientPortalHome() {
           return ethereum
             .request({ method: "eth_chainId" })
             .then((chainUnknown) => {
-              setWalletChainId(chainUnknown as string);
+              const chainId = chainUnknown as string;
+              setWalletChainId(chainId);
               setWalletAddress(accounts[0]);
-              return loadSubscription(accounts[0]);
+              if (isTargetChain(chainId) && !invalidContractConfig) {
+                return loadSubscription(accounts[0]);
+              }
+              return Promise.resolve();
             });
         }
         return Promise.resolve();
@@ -691,6 +750,17 @@ export default function PatientPortalHome() {
     const onChainChanged = (chainId: unknown) => {
       if (typeof chainId === "string") {
         setWalletChainId(chainId);
+        if (!isTargetChain(chainId)) {
+          setSubscription({ active: false, expiry: 0n });
+          setWbtcBalance(0n);
+          return;
+        }
+
+        if (walletAddress && !invalidContractConfig) {
+          loadSubscription(walletAddress).catch(() => {
+            // ignore silent refresh failures
+          });
+        }
       }
     };
 
@@ -714,7 +784,7 @@ export default function PatientPortalHome() {
       ethereum.removeListener?.("chainChanged", onChainChanged);
       ethereum.removeListener?.("accountsChanged", onAccountsChanged);
     };
-  }, [mounted, invalidContractConfig, authUser]);
+  }, [mounted, invalidContractConfig, authUser, walletAddress]);
 
   if (!mounted) {
     return (

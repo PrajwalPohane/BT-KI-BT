@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
+import path from "path";
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "../../../..", ".env") });
 
 const startBlock = Number(process.env.LISTENER_START_BLOCK ?? 0);
 const apiBaseUrl = process.env.API_BASE_URL ?? "http://127.0.0.1:4000";

@@ -52,7 +52,12 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+    try {
+      const parsed = JSON.parse(text) as { error?: string };
+      throw new Error(parsed.error || text || `Request failed: ${response.status}`);
+    } catch {
+      throw new Error(text || `Request failed: ${response.status}`);
+    }
   }
 
   return response.json() as Promise<T>;
@@ -232,6 +237,7 @@ export default function HospitalPortalHome() {
         })
         .catch(() => {
           clearAuthSession();
+          setMessage("Session expired. Please sign in again.");
         });
     } catch {
       clearAuthSession();
