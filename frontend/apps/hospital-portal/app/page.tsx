@@ -89,6 +89,26 @@ export default function HospitalPortalHome() {
     useState("Gamma Care Network");
   const [newInstitutionCountry, setNewInstitutionCountry] = useState("IN");
 
+  const summaryCards = [
+    {
+      label: "Institutions",
+      value: institutions.length.toString().padStart(2, "0"),
+      tone: "mint",
+    },
+    {
+      label: "Audits",
+      value: audits.length.toString().padStart(2, "0"),
+      tone: "sky",
+    },
+    {
+      label: "Decision",
+      value: response ? response.decision : "--",
+      tone: response?.decision === "GRANT" ? "mint" : response?.decision === "DENY" ? "amber" : "neutral",
+    },
+  ];
+
+  const requestSummary = `${requesterInstitutionId} / ${patientId} / ${dataType}`;
+
   function saveAuthSession(token: string, user: AuthUser) {
     setAuthToken(token);
     setAuthUser(user);
@@ -331,6 +351,7 @@ export default function HospitalPortalHome() {
   return (
     <main className="container">
       <header className="hero">
+        <div className="heroBadge">Hospital workflow live</div>
         <h1>BlockMedShare Hospital Portal</h1>
         <p>
           Submit consent-aware cross-institution access requests and inspect
@@ -339,6 +360,11 @@ export default function HospitalPortalHome() {
         <p>
           Signed in as {authUser.name} ({authUser.email})
         </p>
+        <div className="statusCluster">
+          <span className="statusChip statusChip--info">Requester {requesterInstitutionId}</span>
+          <span className="statusChip statusChip--neutral">Patient {patientId}</span>
+          <span className="statusChip statusChip--success">{authUser.role}</span>
+        </div>
       </header>
 
       <section className="card row">
@@ -360,8 +386,18 @@ export default function HospitalPortalHome() {
         </p>
       </section>
 
+      <section className="summaryGrid">
+        {summaryCards.map((item) => (
+          <article key={item.label} className={`summaryCard summaryCard--${item.tone}`}>
+            <span className="summaryLabel">{item.label}</span>
+            <strong className="summaryValue">{item.value}</strong>
+          </article>
+        ))}
+      </section>
+
       <section className="card">
         <h2>Register Institution</h2>
+        <p className="hint">Create or overwrite a verified hospital identity in the demo registry.</p>
         <form className="grid" onSubmit={registerInstitution}>
           <label>
             ID
@@ -390,6 +426,7 @@ export default function HospitalPortalHome() {
 
       <section className="card">
         <h2>Access Request</h2>
+        <p className="hint">Current request: {requestSummary}</p>
         <form className="grid" onSubmit={requestAccess}>
           <label>
             Requester Institution
@@ -434,15 +471,27 @@ export default function HospitalPortalHome() {
       {response && (
         <section className="card">
           <h2>Last Decision</h2>
-          <p>Decision: {response.decision}</p>
-          <p>Reason: {response.reason}</p>
-          <p>Token Hash: {response.tokenHash}</p>
+          <div className="statusGrid">
+            <div>
+              <span className="eyebrow">Decision</span>
+              <p>{response.decision}</p>
+            </div>
+            <div>
+              <span className="eyebrow">Reason</span>
+              <p>{response.reason}</p>
+            </div>
+            <div>
+              <span className="eyebrow">Token</span>
+              <p>{response.tokenHash.slice(0, 16)}...</p>
+            </div>
+          </div>
           {response.plaintext && <p>Decrypted Payload: {response.plaintext}</p>}
         </section>
       )}
 
       <section className="card">
         <h2>Audit Entries</h2>
+        <p className="hint">Use refresh to pull the latest audit trail after each access request.</p>
         <ul className="list">
           {audits.map((item) => (
             <li key={item.id}>

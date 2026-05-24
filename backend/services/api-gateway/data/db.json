@@ -12,40 +12,41 @@
       "name": "Alpha General Hospital",
       "country": "IN",
       "verified": true,
-      "createdAt": "2026-04-22T07:07:31.829Z"
+      "createdAt": "2026-04-24T09:46:50.960Z"
     },
     {
       "id": "hosp-beta",
       "name": "Beta Specialist Center",
       "country": "IN",
       "verified": true,
-      "createdAt": "2026-04-22T07:07:31.832Z"
+      "createdAt": "2026-04-24T09:46:50.992Z"
     }
   ],
   "records": [
     {
-      "id": "rec_3d2c9f9e-8342-4cbf-9111-6f06723c4b77",
+      "id": "rec_19a8ef6e-0c93-49ad-8f5d-a3fdcbeae9a8",
       "patientId": "patient-001",
       "createdByInstitutionId": "hosp-alpha",
       "dataType": "radiology",
-      "ciphertext": "x42K3LcsVEZx6dAtFDyfaTE02n2TZmjVg3m3TqUDuPiapJJmfIczL5HSMA==",
-      "iv": "dE55x1hHuICqMTsX",
-      "authTag": "kxDRBqY85skXCAFBGf7RSQ==",
-      "hash": "282e860f588b6c9880f01822b4c3cc7db1a14e27c3b89121e7578d1822b25c71",
-      "createdAt": "2026-04-22T07:07:31.884Z"
+      "ciphertext": "7cNgJD0nFJ3g5YwFf9aRl6thimwyb/bYHfq05tBfnmhSJgULxVUipceRvA==",
+      "iv": "nxdWK7hoa8x2YJH+",
+      "authTag": "/urboTXkaZ6DXXH9b+crHw==",
+      "hash": "d7f04cce4eb863809ce96d421e928226c4cf29361e9c51c515ee7225f3357b1e",
+      "createdAt": "2026-04-24T09:46:51.125Z"
     }
   ],
   "consents": [
     {
-      "id": "consent_c9582efb-00b4-4b17-9501-e50cf1997e23",
+      "id": "consent_ec739728-7aea-465a-a402-2c178a1484e1",
       "patientId": "patient-001",
-      "patientWalletAddress": "",
+      "patientWalletAddress": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
       "requesterInstitutionId": "hosp-beta",
       "dataType": "radiology",
       "purpose": "treatment",
-      "expiryUnixSeconds": 1776928051,
-      "active": true,
-      "createdAt": "2026-04-22T07:07:31.886Z"
+      "expiryUnixSeconds": 1777111130,
+      "active": false,
+      "createdAt": "2026-04-24T09:58:51.057Z",
+      "revokedAt": "2026-04-24T09:59:19.291Z"
     }
   ],
   "audits": [
@@ -114,6 +115,116 @@
       "decision": "DENY",
       "reason": "CONSENT_NOT_FOUND",
       "tokenHash": "558d226dec7a620477055efed2f665458fce201e5033c2052c63a3a1394e3d6c"
+    },
+    {
+      "id": "audit_5c7da6bc-11ed-489c-b3d2-5e5e3095d2d2",
+      "timestamp": "2026-04-23T09:36:23.175Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "DENY",
+      "reason": "SUBSCRIPTION_INACTIVE",
+      "tokenHash": "e9cf99da4368ecea82ab8144cb9dc7fc892efc696c2d8303629cde04ff283989"
+    },
+    {
+      "id": "audit_31b3a18c-f416-44e5-935a-91d7f1ae0a0e",
+      "timestamp": "2026-04-23T09:37:24.703Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "DENY",
+      "reason": "SUBSCRIPTION_INACTIVE",
+      "tokenHash": "e9cf99da4368ecea82ab8144cb9dc7fc892efc696c2d8303629cde04ff283989"
+    },
+    {
+      "id": "audit_f5488b7a-223c-4dc8-800b-a720a59a8e0e",
+      "timestamp": "2026-04-23T09:41:28.088Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "GRANT",
+      "reason": "AUTHORIZED",
+      "tokenHash": "4c616466563c85c2db1def3acc04c543615e780a86554d4cb92bc311d1fa9113"
+    },
+    {
+      "id": "audit_1e9c2c08-34a9-4430-b633-eaf7f1bb9229",
+      "timestamp": "2026-04-23T09:44:10.639Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "GRANT",
+      "reason": "AUTHORIZED",
+      "tokenHash": "f479b8efaa21e448b693802f6b064e30a2ab1bf8fb21c6b1e30e48de40243726"
+    },
+    {
+      "id": "audit_37758a67-6240-4047-910d-edf7dd679c53",
+      "timestamp": "2026-04-23T09:51:57.891Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "DENY",
+      "reason": "CONSENT_INACTIVE",
+      "tokenHash": "d1a6b1f4cb4b01134be2c41b4f8dbc01f86b4b1e4a53caafe10ee93621a61643"
+    },
+    {
+      "id": "audit_b73acbf0-70c7-44b4-aca5-0eff62ed1dc7",
+      "timestamp": "2026-04-23T09:52:05.626Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "GRANT",
+      "reason": "AUTHORIZED",
+      "tokenHash": "0a6f9672387c3b3140526cff849b7a9f657de594e209f60df01f26f0eaec7128"
+    },
+    {
+      "id": "audit_b9d97f7a-28a3-4a02-90d2-1c90dada1cb9",
+      "timestamp": "2026-04-23T09:55:10.054Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "GRANT",
+      "reason": "AUTHORIZED",
+      "tokenHash": "835dce8cf92705174258c2865e735019c43d6ae1c7f5ed62ae952701aa20023f"
+    },
+    {
+      "id": "audit_56ef0ea5-1975-4aed-a5dc-54c9d62e73a6",
+      "timestamp": "2026-04-23T12:02:36.700Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "DENY",
+      "reason": "CONSENT_INACTIVE",
+      "tokenHash": "d1a6b1f4cb4b01134be2c41b4f8dbc01f86b4b1e4a53caafe10ee93621a61643"
+    },
+    {
+      "id": "audit_44cd6d29-650e-4732-9785-2763e599677f",
+      "timestamp": "2026-04-23T12:02:43.792Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "GRANT",
+      "reason": "AUTHORIZED",
+      "tokenHash": "58a42002f67a072bce546b3cfe53ef5a42a1768f181b3f555c61fdc6eaeb7dd2"
+    },
+    {
+      "id": "audit_aaed7788-a963-4f01-8c5d-0c75ff705e64",
+      "timestamp": "2026-04-24T09:59:57.732Z",
+      "patientId": "patient-001",
+      "requesterInstitutionId": "hosp-beta",
+      "dataType": "radiology",
+      "purpose": "treatment",
+      "decision": "DENY",
+      "reason": "CONSENT_INACTIVE",
+      "tokenHash": "d1a6b1f4cb4b01134be2c41b4f8dbc01f86b4b1e4a53caafe10ee93621a61643"
     }
   ]
 }

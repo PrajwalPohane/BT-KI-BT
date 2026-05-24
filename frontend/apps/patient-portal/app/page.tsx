@@ -236,6 +236,27 @@ export default function PatientPortalHome() {
     () => consents.filter((item) => item.active),
     [consents],
   );
+  const summaryCards = [
+    {
+      label: "Consents",
+      value: activeConsents.length.toString().padStart(2, "0"),
+      tone: "mint",
+    },
+    {
+      label: "Records",
+      value: records.length.toString().padStart(2, "0"),
+      tone: "sky",
+    },
+    {
+      label: "Audits",
+      value: audits.length.toString().padStart(2, "0"),
+      tone: "amber",
+    },
+  ];
+  const walletShort = walletAddress
+    ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
+    : "Not connected";
+  const chainLabel = walletChainId || "Unknown chain";
   const subscriptionRequired = !subscription.active;
   const invalidContractConfig =
     !isAddress(SUBSCRIPTION_ADDRESS) || !isAddress(WBTC_ADDRESS);
@@ -484,6 +505,7 @@ export default function PatientPortalHome() {
         throw new Error("Invalid payment amount");
       }
       const provider = new BrowserProvider(ethereum);
+      await ensureContractsDeployed(provider);
       const signer = await provider.getSigner();
       const signerAddress = await signer.getAddress();
 
@@ -497,7 +519,7 @@ export default function PatientPortalHome() {
       const balance = (await tokenContract.balanceOf(signerAddress)) as bigint;
       if (balance < total) {
         throw new Error(
-          `Insufficient BTC token balance. Need ${formatUnits(total, 8)} BTC, have ${formatUnits(balance, 8)} BTC`,
+          `Insufficient ETH token balance. Need ${formatUnits(total, 8)} ETH, have ${formatUnits(balance, 8)} ETH`,
         );
       }
 
@@ -521,7 +543,7 @@ export default function PatientPortalHome() {
 
       await loadSubscription(walletAddress);
       setSubscriptionOpen(false);
-      setMessage("Subscription payment successful via BTC token");
+      setMessage("Subscription payment successful via ETH token");
     } catch (error) {
       setMessage(normalizeError(error));
     } finally {
@@ -578,12 +600,6 @@ export default function PatientPortalHome() {
 
   async function onGrantConsent(event: FormEvent) {
     event.preventDefault();
-
-    if (subscriptionRequired) {
-      setMessage("Active BTC subscription required before granting consent");
-      setSubscriptionOpen(true);
-      return;
-    }
     if (!walletAddress) {
       setMessage("Connect MetaMask wallet before granting consent");
       setSubscriptionOpen(true);
@@ -616,11 +632,6 @@ export default function PatientPortalHome() {
     requesterInstitutionId: string,
     consentDataType: string,
   ) {
-    if (subscriptionRequired) {
-      setMessage("Active BTC subscription required before managing consent");
-      setSubscriptionOpen(true);
-      return;
-    }
     if (!walletAddress) {
       setMessage("Connect MetaMask wallet before revoking consent");
       setSubscriptionOpen(true);
@@ -863,6 +874,7 @@ export default function PatientPortalHome() {
   return (
     <main className="container">
       <header className="hero">
+        <div className="heroBadge">Patient workspace live</div>
         <h1>BlockMedShare Patient Portal</h1>
         <p>
           Grant and revoke data sharing consent with full audit transparency.
@@ -870,6 +882,13 @@ export default function PatientPortalHome() {
         <p>
           Signed in as {authUser.name} ({authUser.email})
         </p>
+        <div className="statusCluster">
+          <span className="statusChip statusChip--success">
+            {subscription.active ? "Subscription active" : "Subscription idle"}
+          </span>
+          <span className="statusChip statusChip--info">Wallet {walletShort}</span>
+          <span className="statusChip statusChip--neutral">Chain {chainLabel}</span>
+        </div>
       </header>
 
       <section className="card row">
@@ -893,7 +912,7 @@ export default function PatientPortalHome() {
           Refresh
         </button>
         <button type="button" onClick={() => setSubscriptionOpen(true)}>
-          Manage BTC Subscription
+          Manage ETH Subscription
         </button>
         <p className="hint">
           Seed Demo recreates the demo patient record, institutions, and
@@ -902,21 +921,50 @@ export default function PatientPortalHome() {
         </p>
       </section>
 
+      <section className="summaryGrid">
+        {summaryCards.map((item) => (
+          <article key={item.label} className={`summaryCard summaryCard--${item.tone}`}>
+            <span className="summaryLabel">{item.label}</span>
+            <strong className="summaryValue">{item.value}</strong>
+          </article>
+        ))}
+      </section>
+
       <section className="card">
         <h2>Subscription Status</h2>
-        <p>
-          Wallet:{" "}
-          {walletAddress
-            ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
-            : "Not connected"}
-        </p>
+        <div className="statusGrid">
+          <div>
+            <span className="eyebrow">Wallet</span>
+            <p>{walletShort}</p>
+          </div>
+          <div>
+            <span className="eyebrow">Network</span>
+            <p>{chainLabel}</p>
+          </div>
+          <div>
+            <span className="eyebrow">Subscription</span>
+            <p>{subscription.active ? "Active" : "Inactive"}</p>
+          </div>
+        </div>
         <p>
           Status: {subscription.active ? "Active" : "Inactive"}
           {subscription.expiry > 0n
             ? ` (expires ${new Date(Number(subscription.expiry) * 1000).toLocaleString()})`
             : ""}
         </p>
-        <p>WBTC Balance: {formatUnits(wbtcBalance, 8)} BTC</p>
+        <p>ETH Balance: {formatUnits(wbtcBalance, 8)} ETH</p>
+        <div className="actionRow">
+          <button
+            type="button"
+            onClick={() => loadSubscription(walletAddress)}
+            disabled={!walletAddress}
+          >
+            Refresh Wallet Stats
+          </button>
+          <button type="button" onClick={() => setSubscriptionOpen(true)}>
+            Open Subscription Panel
+          </button>
+        </div>
       </section>
 
       <section className="card">
@@ -936,7 +984,7 @@ export default function PatientPortalHome() {
             </select>
           </label>
           <label>
-            Data Type
+            Report Type
             <input
               value={dataType}
               onChange={(event) => setDataType(event.target.value)}
@@ -964,13 +1012,16 @@ export default function PatientPortalHome() {
         </form>
         {subscriptionRequired && (
           <p className="warning">
-            An active BTC subscription is required to grant or revoke consent.
+            An active ETH subscription is required to grant or revoke consent.
           </p>
         )}
       </section>
 
       <section className="card">
         <h2>Active Consents</h2>
+        <p className="hint">
+          Click a revoke button to update consent state instantly and refresh the audit timeline.
+        </p>
         <ul className="list">
           {activeConsents.map((item) => (
             <li key={item.id}>
@@ -995,10 +1046,10 @@ export default function PatientPortalHome() {
       {subscriptionOpen && (
         <div className="modalBackdrop" role="dialog" aria-modal="true">
           <div className="modalCard">
-            <h2>Subscribe Using Bitcoin on MetaMask</h2>
+            <h2>Subscribe Using ETH on MetaMask</h2>
             <p>
-              Payment is processed using BTC-compatible ERC-20 token (for
-              example WBTC/mBTC) through MetaMask.
+              Payment is processed using ETH-compatible token flow through
+              MetaMask.
             </p>
             <p className="hint">
               Required chain: {TARGET_CHAIN_NAME} ({TARGET_CHAIN_HEX}). Current
@@ -1057,7 +1108,7 @@ export default function PatientPortalHome() {
                 >
                   {plans.map((plan) => (
                     <option key={plan.id} value={plan.id}>
-                      {plan.name} - {formatUnits(plan.monthlyPriceSats, 8)} BTC
+                      {plan.name} - {formatUnits(plan.monthlyPriceSats, 8)} ETH
                       / month
                     </option>
                   ))}
@@ -1098,6 +1149,7 @@ export default function PatientPortalHome() {
 
       <section className="card">
         <h2>Patient Records (Encrypted Off-chain Metadata)</h2>
+        <p className="hint">Hover the records to inspect the stored encrypted metadata references.</p>
         <ul className="list">
           {records.map((item) => (
             <li key={item.id}>
@@ -1110,6 +1162,7 @@ export default function PatientPortalHome() {
 
       <section className="card">
         <h2>Audit Trail</h2>
+        <p className="hint">The latest consent and access events appear here after each on-chain and API action.</p>
         <ul className="list">
           {audits.map((item) => (
             <li key={item.id}>

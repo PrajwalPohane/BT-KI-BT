@@ -31,6 +31,10 @@ export function seedDemoData(): void {
   registerInstitution({ id: "hosp-alpha", name: "Alpha General Hospital", country: "IN" });
   registerInstitution({ id: "hosp-beta", name: "Beta Specialist Center", country: "IN" });
 
+  const demoWalletAddress = normalizeWalletAddress(
+    process.env.DEMO_PATIENT_WALLET_ADDRESS ?? "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+  );
+
   updateStore((state) => {
     const records = state.records.filter(
       (item) => !(item.patientId === "patient-001" && item.createdByInstitutionId === "hosp-alpha" && item.dataType === "radiology")
@@ -56,7 +60,7 @@ export function seedDemoData(): void {
     const demoConsent: ConsentRecord = {
       id: makeId("consent"),
       patientId: "patient-001",
-      patientWalletAddress: process.env.DEMO_PATIENT_WALLET_ADDRESS ?? "",
+      patientWalletAddress: demoWalletAddress,
       requesterInstitutionId: "hosp-beta",
       dataType: "radiology",
       purpose: "treatment",
@@ -141,11 +145,6 @@ export async function grantConsent(input: {
     throw new Error("Requesting institution is not verified");
   }
 
-  const subscribed = await hasActiveSubscription(input.patientWalletAddress);
-  if (!subscribed) {
-    throw new Error("Active subscription required");
-  }
-
   const normalizedWalletAddress = normalizeWalletAddress(input.patientWalletAddress);
 
   const consent: ConsentRecord = {
@@ -195,11 +194,6 @@ export async function revokeConsent(input: {
 
   if (normalizedStoredWallet && normalizedStoredWallet !== normalizedInputWallet) {
     throw new Error("Wallet mismatch for consent revocation");
-  }
-
-  const subscribed = await hasActiveSubscription(normalizedInputWallet);
-  if (!subscribed) {
-    throw new Error("Active subscription required");
   }
 
   const revoked: ConsentRecord = {
@@ -327,27 +321,6 @@ export async function requestAccess(input: {
       tokenHash
     });
     return { decision: "DENY", reason: "PURPOSE_MISMATCH", tokenHash, audit };
-  }
-
-  if (isSubscriptionEnforced()) {
-    const subscribed = await hasActiveSubscription(consent.patientWalletAddress);
-    if (!subscribed) {
-      const tokenHash = makeTokenHash([
-        input.patientId,
-        input.requesterInstitutionId,
-        input.dataType,
-        input.purpose,
-        "DENY",
-        "SUBSCRIPTION_INACTIVE"
-      ]);
-      const audit = appendAudit({
-        ...input,
-        decision: "DENY",
-        reason: "SUBSCRIPTION_INACTIVE",
-        tokenHash
-      });
-      return { decision: "DENY", reason: "SUBSCRIPTION_INACTIVE", tokenHash, audit };
-    }
   }
 
   const matchingRecord = [...store.records]
